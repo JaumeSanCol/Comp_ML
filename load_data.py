@@ -47,9 +47,9 @@ def load_city_data(city: str) -> pd.DataFrame:
 
         city_data = {"reviews": city_df, "businesses": businesses_in_city}
 
-        with open(file_path) as f:
+        with open(file_path, "wb") as f:
             pickle.dump(city_data, f)
     else:
-        with open(file_path) as f:
+        with open(file_path, "rb") as f:
             city_data = pickle.load(f)
     return city_data
