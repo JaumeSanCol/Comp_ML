@@ -38,8 +38,8 @@ def load_city_data(city: str) -> pd.DataFrame:
     file_path = os.path.join("data", "city_data.pkl")
     if not os.path.exists(file_path):
         data = load_data()
-        review_df = data["reviews"]
-        business_df = data["businesses"]
+        review_df = data["reviews"].reset_index(drop=True)
+        business_df = data["businesses"].reset_index(drop=True)
 
         businesses_in_city = business_df[business_df["city"] == city]
         business_ids = businesses_in_city["business_id"]
