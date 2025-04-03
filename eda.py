@@ -109,7 +109,7 @@ similarities = util.cos_sim(anchor_embedding, business_categories_embeddings).nu
 threshold = 0.6
 mask = (similarities >= threshold).flatten()
 restaurant_df = business_df[mask]
-restaurant_df
+restaurant_df.to_csv('philly.csv', index=False, encoding='utf-8')
 #%%
 print(f'There are {reviews_df["business_id"].isin(set(restaurant_df["business_id"])).to_numpy().sum()} reviews for restaurants.')
 #%% md

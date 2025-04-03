@@ -2,179 +2,73 @@
 import pandas as pd
 import json
 import numpy as np
-
+import os
 
 # %% [markdown]
 # ## Prepare
 
 # %%
-checkin_path="/home/jaume/Escritorio/Ultim_Semestre/Comp.ML/Practicas/project/Yelp-JSON/Yelp JSON/yelp_dataset/yelp_academic_dataset_checkin.json"
-business_path="/home/jaume/Escritorio/Ultim_Semestre/Comp.ML/Practicas/project/Yelp-JSON/Yelp JSON/yelp_dataset/yelp_academic_dataset_business.json"
-review_path="/home/jaume/Escritorio/Ultim_Semestre/Comp.ML/Practicas/project/Yelp-JSON/Yelp JSON/yelp_dataset/yelp_academic_dataset_review.json"
-tip_path="/home/jaume/Escritorio/Ultim_Semestre/Comp.ML/Practicas/project/Yelp-JSON/Yelp JSON/yelp_dataset/yelp_academic_dataset_tip.json"
-user_path="/home/jaume/Escritorio/Ultim_Semestre/Comp.ML/Practicas/project/Yelp-JSON/Yelp JSON/yelp_dataset/yelp_academic_dataset_user.json"
-
+philly=pd.read_csv('philly.csv', encoding='utf-8')
 
 # %%
-'''
-with open(checkin_path, "r", encoding="utf-8") as f:
-    data = [json.loads(line) for line in f]
+data_path = "data"
+reviews_path = "yelp_academic_dataset_review.json"
 
-checkin = pd.DataFrame(data)'''
-with open(business_path, "r", encoding="utf-8") as f:
-    data = [json.loads(line) for line in f]
-
-business = pd.DataFrame(data)
-with open(review_path, "r", encoding="utf-8") as f:
-    data = [json.loads(line) for line in f]
-
-review = pd.DataFrame(data)
-'''
-with open(tip_path, "r", encoding="utf-8") as f:
-    data = [json.loads(line) for line in f]
-
-tip = pd.DataFrame(data)
-with open(user_path, "r", encoding="utf-8") as f:
-    data = [json.loads(line) for line in f]
-
-user = pd.DataFrame(data)
-'''
+with open(os.path.join(data_path, reviews_path), "r", encoding="utf-8") as f:
+    review_data = [json.loads(line) for line in f]
+reviews = pd.DataFrame(review_data)
 
 # %%
-business_filtered = business[business["city"] == "Sparks"]
-business_ids = business_filtered["business_id"]
+philly.columns
 
-filtered_reviews = review[review["business_id"].isin(business_ids)]
-print(filtered_reviews.shape)
+# %%
+reviews.columns
+
+# %%
+# Merge both DataFrames on 'business_id', keeping only matching reviews
+filtered_merge= reviews.merge(philly, on="business_id", how="inner",suffixes=("_review", "_business"))
+
+# %%
+filtered_reviews=filtered_merge.drop(columns=['hours','useful', 'funny', 'cool','latitude', 'longitude','name', 'address', 'city', 'state','postal_code','is_open','attributes','categories',])
+
+# %%
+filtered_reviews.describe()
+
+# %%
+#filtered_reviews=filtered_reviews[filtered_reviews['review_count']>=70]
+
+# %%
+filtered_reviews
 
 # %% [markdown]
 # ### Remove users/business with low number of reviews
 
 # %%
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+# Sort by date (most recent first) and keep only the latest review per user-business pair
+remove_duplicates= filtered_reviews.sort_values(by="date", ascending=False).drop_duplicates(subset=["business_id", "user_id"], keep="first")
 
-# Count the number of reviews per 'business_id' and 'user_id'
-business_reviews = filtered_reviews['business_id'].value_counts().reset_index()
-business_reviews.columns = ['business_id', 'review_count']
+# Count the number of reviews per user
+user_review_counts = remove_duplicates["user_id"].value_counts()
 
-user_reviews = filtered_reviews['user_id'].value_counts().reset_index()
-user_reviews.columns = ['user_id', 'review_count']
+# Keep only users with at least 10 reviews
+valid_users = user_review_counts[user_review_counts >= 10].index
 
-# Set up figure and axes
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-
-# Scatter plot for 'business_id'
-sns.scatterplot(x=business_reviews.index, y=business_reviews['review_count'], ax=axes[0, 0])
-axes[0, 0].set_title("Scatter Plot of Review Count per Business ID")
-axes[0, 0].set_xlabel("Index")
-axes[0, 0].set_ylabel("Number of Reviews")
-
-# Histogram for 'business_id' review distribution
-sns.histplot(business_reviews['review_count'], bins=1000, kde=True, ax=axes[0, 1])
-axes[0, 1].set_title("Distribution of Review Counts per Business ID")
-axes[0, 1].set_xlabel("Number of Reviews")
-axes[0, 1].set_ylabel("Frequency")
-axes[0, 1].set_xlim(0, 100) 
-
-# Scatter plot for 'user_id'
-sns.scatterplot(x=user_reviews.index, y=user_reviews['review_count'], ax=axes[1, 0])
-axes[1, 0].set_title("Scatter Plot of Review Count per User ID")
-axes[1, 0].set_xlabel("Index")
-axes[1, 0].set_ylabel("Number of Reviews")
-
-# Histogram for 'user_id' review distribution
-sns.histplot(user_reviews['review_count'], bins=1000, kde=True, ax=axes[1, 1])
-axes[1, 1].set_title("Distribution of Review Counts per User ID")
-axes[1, 1].set_xlabel("Number of Reviews")
-axes[1, 1].set_ylabel("Frequency")
-axes[1, 1].set_xlim(0, 10) 
-
-# Adjust layout
-plt.tight_layout()
-plt.show()
-
+# Filter the DataFrame
+corpus_filtered = remove_duplicates[remove_duplicates["user_id"].isin(valid_users)]
 
 # %%
-# Define thresholds (adjust as needed)
-business_threshold = 5  # Minimum number of reviews a business must have
-user_threshold = 2  # Minimum number of reviews a user must have
-
-# Count reviews per business and user
-business_counts = filtered_reviews['business_id'].value_counts()
-user_counts = filtered_reviews['user_id'].value_counts()
-
-# Filter out businesses and users with low review counts
-filtered_reviews = filtered_reviews[
-    (filtered_reviews['business_id'].isin(business_counts[business_counts >= business_threshold].index)) &
-    (filtered_reviews['user_id'].isin(user_counts[user_counts >= user_threshold].index))
-]
-
-# Display the filtered DataFrame
-print(filtered_reviews.shape)
-
-
-# %%
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-# Count the number of reviews per 'business_id' and 'user_id'
-business_reviews = filtered_reviews['business_id'].value_counts().reset_index()
-business_reviews.columns = ['business_id', 'review_count']
-
-user_reviews = filtered_reviews['user_id'].value_counts().reset_index()
-user_reviews.columns = ['user_id', 'review_count']
-
-# Set up figure and axes
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-
-# Scatter plot for 'business_id'
-sns.scatterplot(x=business_reviews.index, y=business_reviews['review_count'], ax=axes[0, 0])
-axes[0, 0].set_title("Scatter Plot of Review Count per Business ID")
-axes[0, 0].set_xlabel("Index")
-axes[0, 0].set_ylabel("Number of Reviews")
-
-# Histogram for 'business_id' review distribution
-sns.histplot(business_reviews['review_count'], bins=1000, kde=True, ax=axes[0, 1])
-axes[0, 1].set_title("Distribution of Review Counts per Business ID")
-axes[0, 1].set_xlabel("Number of Reviews")
-axes[0, 1].set_ylabel("Frequency")
-axes[0, 1].set_xlim(0, 100) 
-
-# Scatter plot for 'user_id'
-sns.scatterplot(x=user_reviews.index, y=user_reviews['review_count'], ax=axes[1, 0])
-axes[1, 0].set_title("Scatter Plot of Review Count per User ID")
-axes[1, 0].set_xlabel("Index")
-axes[1, 0].set_ylabel("Number of Reviews")
-
-# Histogram for 'user_id' review distribution
-sns.histplot(user_reviews['review_count'], bins=1000, kde=True, ax=axes[1, 1])
-axes[1, 1].set_title("Distribution of Review Counts per User ID")
-axes[1, 1].set_xlabel("Number of Reviews")
-axes[1, 1].set_ylabel("Frequency")
-axes[1, 1].set_xlim(0, 10) 
-
-# Adjust layout
-plt.tight_layout()
-plt.show()
-
-
-# %%
-review_short= filtered_reviews.drop(columns=["review_id","business_id","date"])
-review_short
+corpus_filtered
 
 # %% [markdown]
 # ### Lowecasing
 
 # %%
-review_lower=review_short
+review_lower=corpus_filtered
 review_lower["text"]=review_lower["text"].str.lower()
 review_lower
 
 # %%
-corpus=review_lower.drop(columns=["useful","funny","cool"])
+corpus=review_lower
 
 # %% [markdown]
 # ### First Cleaning
@@ -182,10 +76,21 @@ corpus=review_lower.drop(columns=["useful","funny","cool"])
 
 # %%
 import string
+import re
 
+# Remove newlines, ellipses, and numbers
 corpus["text"] = corpus["text"].apply(lambda text: text.replace("\n", "").replace("...", ""))
-corpus["text"] = corpus["text"].apply(lambda text: ''.join([char for char in text if char not in string.punctuation]))
 
+# Remove punctuation and numbers
+corpus["text"] = corpus["text"].apply(lambda text: ''.join([char for char in text if char not in string.punctuation and not char.isdigit()]))
+
+# Alternatively, you can use a regular expression to remove numbers
+corpus["text"] = corpus["text"].apply(lambda text: re.sub(r'\d+', '', text))
+
+
+
+# %%
+corpus
 
 # %% [markdown]
 # ### Lemmatization
@@ -195,9 +100,6 @@ import spacy
 
 nlp = spacy.load("en_core_web_sm")
 
-
-# %%
-corpus
 
 # %%
 corpus['words'] = None
@@ -215,7 +117,7 @@ for index, sample in corpus.iterrows():
 corpus
 
 # %% [markdown]
-# ### Remove stopWords
+# ### Stopwords
 
 # %%
 import nltk
@@ -229,81 +131,42 @@ stop_words = set(stopwords.words('english'))
 
 corpus["words"] = corpus["words"].apply(lambda x: [word for word in x if word.lower() not in stop_words and not word.isdigit()])
 
-# Limpiar directamente la columna 'words' eliminando signos de puntuación y saltos de línea
-
-# %% [markdown]
-# ### Remove foreing reviews
 
 # %%
-import pandas as pd
-import nltk
-from nltk.corpus import words
-
-# Dowload english
-nltk.download("words")
-english_vocab = set(words.words())
-
-# count words that are not in english
-def count_non_english_words(word_list):
-    return sum(1 for word in word_list if word.lower() not in english_vocab)
-
-# Filtrar corpus
-corpus["non_english_count"] = corpus["words"].apply(count_non_english_words)
-
-
-pd.set_option('display.max_colwidth', None)  # Show full text without truncation
 corpus
 
+# %% [markdown]
+# ### Only english
 
 # %%
-pd.reset_option('display.max_colwidth')
+import nltk
+import pandas as pd
 
-# %%
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+# Download the words corpus from nltk
+nltk.download('words')
+from nltk.corpus import words
 
-# Filter values up to 50
-filtered_values = corpus["non_english_count"][corpus["non_english_count"] <= 100]
+# Create a set of English words (lowercased for case-insensitive checking)
+english_words_set = set(words.words())
 
-# Compute histogram and cumulative distribution
-counts, bin_edges = np.histogram(filtered_values, bins=50, density=True)
-cdf = np.cumsum(counts) / np.sum(counts)  # Normalize
+# Function to filter English words using the predefined English word list
+def filter_english_words(word_list):
+    filtered_words = [word for word in word_list if word.lower() in english_words_set]
+    return filtered_words
 
-# Find the threshold where 95% of the data accumulates
-threshold_index = np.argmax(cdf >= 0.95)
-threshold_value = bin_edges[threshold_index]
 
-# Create side-by-side plots
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+corpus["words"] = corpus["words"].apply(filter_english_words)
 
-# Left plot: Histogram (distribution)
-sns.histplot(filtered_values, bins=30, kde=True, ax=axes[0], color="blue", alpha=0.6)
-axes[0].set_xlabel("Non-English Count")
-axes[0].set_ylabel("Density")
-axes[0].set_title("Distribution of Non-English Count")
-
-# Right plot: Cumulative Distribution Function (CDF)
-axes[1].plot(bin_edges[1:], cdf, color="red", marker="o", linestyle="-", label="Cumulative Distribution")
-axes[1].axvline(threshold_value, color="green", linestyle="--", label=f"95% accumulated ({threshold_value:.2f})")
-axes[1].set_xlabel("Non-English Count")
-axes[1].set_ylabel("Cumulative Probability")
-axes[1].set_title("Cumulative Distribution Function (CDF)")
-axes[1].legend()
-
-plt.tight_layout()
-plt.show()
-
-# Print the threshold value
-print(f"The value where 95% of the data accumulates is approximately {threshold_value:.2f}")
+print(corpus)
 
 
 # %%
-corpus = corpus[
-    (corpus["non_english_count"] <= threshold_value) &  # If the number or foreign words is higher than the threshold we set
-    (corpus["non_english_count"] <= corpus["words"].apply(len) * 0.5)  # we remove the sample if a high percentage of the text is not in english
-]
+# Remove empty lists
+corpus = corpus[corpus["words"].apply(lambda x: len(x) > 0)]
 
+
+# %%
+corpus
 
 # %% [markdown]
 # ### Common words
@@ -328,22 +191,17 @@ plt.show()
 
 
 # %%
-irrelevant_words=["well","tell","one","say","think","come","look","even","make","really","ask","use","see","want","go","order","good","work","place","need"]
-
-# %%
-corpus["words"] = corpus["words"].apply(lambda sublist: [word for word in sublist if word not in irrelevant_words])
 corpus["words"] = corpus["words"].apply(lambda sublist: [word for word in sublist if word.strip()])
-
 
 # %%
 corpus['words_join'] = None
 corpus.loc[:, "words_join"] = corpus["words"].apply(lambda x: " ".join([word for word in x if word]))
 
 # %%
-corpus=corpus.drop(columns="non_english_count")
+corpus
 
 # %%
-corpus
+corpus=corpus.drop(columns=["date","review_count","stars_business"])
 
 # %% [markdown]
 # ### Save cleaned corpus
@@ -386,13 +244,67 @@ corpus["text"][corpus["vader"]==0]
 corpus
 
 # %% [markdown]
+# ### adjectives only
+
+# %%
+import spacy
+import pandas as pd
+from tqdm import tqdm  # For progress bar
+
+# Load the spaCy English model
+nlp = spacy.load("en_core_web_sm")
+
+# Function to extract only adjectives from a text
+def extract_adjectives(text):
+    doc = nlp(text)  # Process the full text
+    return [token.text for token in doc if token.pos_ == "ADJ"]
+
+tqdm.pandas(desc="Extracting adjectives...")
+
+# Apply the function with progress bar
+corpus['adj'] = corpus['words'].progress_apply(extract_adjectives)
+
+# Print the result
+print(corpus)
+
+
+# %%
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+
+# Aplanar la lista de listas y unir palabras en un solo string
+flat_words = [word for sublist in corpus["adj"] for word in sublist]
+text = " ".join(flat_words)
+
+# Crear el WordCloud
+wordcloud = WordCloud(width=800, height=400, background_color="white", colormap="viridis").generate(text)
+
+# Graficar el WordCloud
+plt.figure(figsize=(12, 6))
+plt.imshow(wordcloud, interpolation="bilinear")
+plt.axis("off")  # Ocultar ejes
+plt.title("Word Cloud de Corpus")
+plt.show()
+
+
+# %%
+irrelevant_words=["good"]
+corpus["adj"] = corpus["adj"].apply(lambda sublist: [word for word in sublist if word not in irrelevant_words])
+
+# %%
+corpus['adj_join'] = None
+corpus.loc[:, "adj_join"] = corpus["adj"].apply(lambda x: " ".join([word for word in x if word]))
+
+# %%
+corpus
+
+# %% [markdown]
 # ## LDA
 
 # %%
 from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.feature_extraction.text import CountVectorizer
 num_batches = 7
-n_topics = 9
 batches = np.array_split(corpus, num_batches)
 
 
@@ -418,6 +330,56 @@ def keys_to_counts(keys):
     counts = [pair[1] for pair in count_pairs]
     return (categories, counts)
 
+
+# %%
+num_batches
+
+# %%
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.decomposition import LatentDirichletAllocation
+from sklearn.feature_extraction.text import CountVectorizer
+
+X = vectorizer.fit_transform(corpus["adj_join"])
+
+# Try different numbers of topics and record scores
+topic_range = range(2, 15)  # Test from 2 to 15 topics
+perplexities = []
+log_likelihoods = []
+
+for n_topics in topic_range:
+    lda = LatentDirichletAllocation(n_components=n_topics, random_state=42)
+    lda.fit(X)
+    
+    perplexities.append(lda.perplexity(X))  # Lower is better
+    log_likelihoods.append(lda.score(X))   # Higher is better
+
+# Plot results
+fig, ax1 = plt.subplots()
+
+ax1.plot(topic_range, perplexities, marker="o", color="red", label="Perplexity")
+ax1.set_xlabel("Number of Topics")
+ax1.set_ylabel("Perplexity (lower is better)", color="red")
+
+ax2 = ax1.twinx()
+ax2.plot(topic_range, log_likelihoods, marker="s", color="blue", label="Log-Likelihood")
+ax2.set_ylabel("Log-Likelihood (higher is better)", color="blue")
+
+plt.title("Choosing the Optimal Number of Topics")
+plt.show()
+
+# %%
+corpus
+
+# %%
+
+n_topics = 6
+num_batches=1
+batches = np.array_split(corpus, num_batches)
+
+
+# %%
+n_topics
 
 # %%
 # Define helper functions
@@ -449,73 +411,6 @@ def get_top_n_words(n, keys, document_term_matrix, count_vectorizer):
     return top_words
 
 # %%
-num_batches
-
-# %%
-
-import gensim
-import gensim.corpora as corpora
-from gensim.models import CoherenceModel
-import matplotlib.pyplot as plt
-import numpy as np
-# Suponiendo que tienes un DataFrame con una columna "words"
-df_corpus = corpus
-
-
-# Dividir en batches correctamente
-num_batches = 7
-df_batches = np.array_split(df_corpus, num_batches)  # Dividir el DataFrame en partes
-
-# Rango de número de tópicos a probar
-topic_range = range(2, 15)
-coherence_values = np.zeros(len(topic_range))  # Acumular coherencia
-
-# Procesar cada batch
-for batch_idx, batch_df in enumerate(df_batches):
-    print(f"\nProcesando Batch {batch_idx+1}/{num_batches}...")
-
-    # Convertir la columna "words" a lista de listas
-    batch_texts = corpus["words"].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x).tolist()
-
-    # Crear diccionario y corpus para este batch
-    dictionary = corpora.Dictionary(batch_texts)
-    corpus2 = [dictionary.doc2bow(text) for text in batch_texts]
-
-    # Calcular coherencia para cada número de tópicos
-    for i, num_topics in enumerate(topic_range):
-        lda_model = gensim.models.LdaModel(corpus=corpus2, id2word=dictionary, num_topics=num_topics, random_state=42)
-        coherence_model = CoherenceModel(model=lda_model, texts=batch_texts, dictionary=dictionary, coherence='c_v')
-        coherence_values[i] += coherence_model.get_coherence()  # Sumar coherencia del batch
-
-# Promediar los valores de coherencia
-coherence_values /= num_batches  
-
-# Graficar coherencia vs. número de tópicos
-plt.figure(figsize=(8, 5))
-plt.plot(topic_range, coherence_values, marker='o')
-plt.xlabel("Número de Tópicos")
-plt.ylabel("Coherencia Promedio")
-plt.title("Selección del Número de Tópicos con Coherencia (Batches)")
-plt.grid()
-plt.show()
-
-# %%
-corpus
-
-# %%
-
-n_topics = np.argmax(coherence_values)+2
-num_batches=1
-batches = np.array_split(corpus, num_batches)
-
-
-# %%
-n_topics=12
-
-# %%
-batches[0]
-
-# %%
 # Store topic distributions
 all_topic_matrices = []
 
@@ -524,7 +419,7 @@ for batch_idx, batch in enumerate(batches):
     
     # Feature extraction
     vectorizer = CountVectorizer()
-    X = vectorizer.fit_transform(batch["words_join"].to_numpy())
+    X = vectorizer.fit_transform(corpus["adj_join"].to_numpy())
 
     # LDA model
     lda_model = LatentDirichletAllocation(n_components=n_topics, learning_method='online', 
@@ -561,7 +456,7 @@ top_n_words_lda = [topic.split() for topic in top_n_words_lda]  # <- Agregar est
 word_counts = Counter(word for topic in top_n_words_lda for word in topic)
 
 # Filtrar palabras que aparecen en más de un tópico
-repeated_words = {word for word, count in word_counts.items() if count > 2}
+repeated_words = {word for word, count in word_counts.items() if count > 4}
 
 # Crear una copia de top_n_words_lda sin palabras repetidas
 filtered_top_n_words_lda = [
@@ -575,20 +470,6 @@ print("Palabras repetidas en múltiples tópicos:", repeated_words)
 # Mostrar los nuevos tópicos sin palabras repetidas
 for i, topic in enumerate(filtered_top_n_words_lda, 1):
     print(f"Tópico {i}:", topic)
-
-
-# %%
-filtered_top_n_words_lda = [topic for topic in filtered_top_n_words_lda if topic]  
-
-
-# %%
-#filtered_top_n_words_lda=top_n_words_lda
-
-# %%
-filtered_top_n_words_lda = [
-    [word for word in topic if word not in {"movie", "teather"}]
-    for topic in filtered_top_n_words_lda
-]
 
 
 # %% [markdown]
@@ -633,7 +514,7 @@ from gensim.models import Word2Vec
 model = Word2Vec(preprocessed_sentences, 
                  vector_size=100,  # Dimensión de los embeddings
                  window=5,         # Contexto de palabras
-                 min_count=1,      # Ignora palabras con menos de 2 apariciones
+                 min_count=2,      # Ignora palabras con menos de 2 apariciones
                  workers=4,        # Paralelización
                  sg=1)             # Skip-gram (sg=1) o CBOW (sg=0)
 
@@ -668,8 +549,11 @@ def reduce_dimensions(model, num_dimensions=2, words=[]):
 def plot_words_by_topic(vectors, labels, topics):
     plt.figure(figsize=(10, 8))
 
-    # Crear un color único para cada tópico
-    topic_colors = {i: plt.cm.tab10(i) for i in range(len(topics))}
+    # Crear una paleta de colores con suficientes colores únicos
+    num_topics = len(topics)
+    cmap = plt.cm.get_cmap("tab20", num_topics)  # Hasta 20 colores únicos
+
+    topic_colors = {i: cmap(i) for i in range(num_topics)}
 
     word_to_topic = {}  # Diccionario para mapear palabra -> tópico
     for topic_idx, words in enumerate(topics):
@@ -679,14 +563,15 @@ def plot_words_by_topic(vectors, labels, topics):
     for i, label in enumerate(labels):
         x, y = vectors[i]
         topic_idx = word_to_topic.get(label, -1)
-        color = topic_colors.get(topic_idx, "gray")
+        color = topic_colors.get(topic_idx, "gray")  # Gris si el tópico no se encuentra
         plt.scatter(x, y, color=color, alpha=0.7)
         plt.text(x + 0.1, y + 0.1, label, fontsize=9, color=color)
 
     plt.xlabel("Dimensión 1")
     plt.ylabel("Dimensión 2")
-    plt.title("Visualización de palabras por tópico con t-SNE")
+    plt.title("Words-topics t-SNE")
     plt.show()
+
 
 
 # %%
@@ -696,6 +581,7 @@ print(list(model.wv.index_to_key)[:20])  # Muestra algunas palabras del vocabula
 # %%
 # Extraer palabras únicas de filtered_top_n_words_lda
 words_to_plot = list(set(word for topic in filtered_top_n_words_lda for word in topic))
+words_to_plot =[char for char in words_to_plot  if char != "green"]
 
 # Reducir dimensionalidad
 vectors_2d, labels = reduce_dimensions(model, num_dimensions=2, words=words_to_plot)
@@ -703,32 +589,193 @@ vectors_2d, labels = reduce_dimensions(model, num_dimensions=2, words=words_to_p
 # Graficar con colores por tópico
 plot_words_by_topic(vectors_2d, labels, filtered_top_n_words_lda)
 
+# %% [markdown]
+# ## Agregate
+
 # %%
-from scipy.spatial.distance import euclidean
+dataset_f = pd.read_csv('topics.csv', encoding='utf-8')
+
+# %%
+dataset_f.columns
+
+# %% [markdown]
+# ### Useful
+
+# %%
+reviews.columns
+
+# %%
+useful=reviews.drop(columns=[ 'user_id', 'business_id', 'stars', 'funny','cool', 'text', 'date'])
+
+# %%
+dataset_f=dataset_f.merge(useful, on="review_id", how="inner",)
+
+# %%
+dataset_f.columns
+
+# %%
+import pandas as pd
+
+# Assuming dataset_f is your DataFrame
+# Function to adjust the topic values based on vader
+def adjust_values(row):
+    if row['vader'] == 0:
+        # If vader is 0, multiply topic values by -1 to make them subtract
+        return row[['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']] * -1
+    return row[['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']]
+
+# Apply the function to adjust the topic values based on vader
+dataset_f[['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']] = dataset_f.apply(adjust_values, axis=1)
+
+# Now group by 'user_id' and sum the topic values
+results = dataset_f.groupby('user_id')[['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']].sum()
+
+# Multiply each topic column by the 'useful' column for each row
+dataset_f_weighted = dataset_f[['business_id', 'useful', 'topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']].copy()
+
+# Apply the weighting (multiplying the topic columns by the 'useful' column)
+for topic in ['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']:
+    dataset_f_weighted[topic] = dataset_f_weighted[topic] * dataset_f_weighted['useful']
+
+# Now, group by 'business_id' and sum the weighted topic columns
+business_results = dataset_f_weighted.groupby('business_id')[['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']].sum()
+
+
+merged_df = dataset_f.merge(results, on='user_id', suffixes=('_user', '_business'))
+
+# Subtract the topic values for each review
+for topic in ['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']:
+    merged_df[topic] = merged_df[f'{topic}_user'] - merged_df[f'{topic}_business']
+
+# Drop the intermediate columns used for the merge (optional, for clarity)
+merged_df.drop(columns=[f'{topic}_user' for topic in ['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']] +
+                  [f'{topic}_business' for topic in ['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']], inplace=True)
+
+# Display the final DataFrame
+merged_df
+
+
+# %%
+import pandas as pd
+
+# Multiply each topic column by the 'useful' column for each row
+dataset_f_weighted = dataset_f[['business_id', 'useful', 'topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']].copy()
+
+# Apply the weighting (multiplying the topic columns by the 'useful' column)
+for topic in ['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']:
+    dataset_f_weighted[topic] = dataset_f_weighted[topic] * dataset_f_weighted['useful']
+
+# Now, group by 'business_id' and sum the weighted topic columns
+business_results = dataset_f_weighted.groupby('business_id')[['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']].sum()
+
+
+merged_df = dataset_f.merge(results, on='user_id', suffixes=('_user', '_business'))
+
+# Subtract the topic values for each review
+for topic in ['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']:
+    merged_df[topic] = merged_df[f'{topic}_user'] - merged_df[f'{topic}_business']
+
+# Drop the intermediate columns used for the merge (optional, for clarity)
+merged_df.drop(columns=[f'{topic}_user' for topic in ['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']] +
+                  [f'{topic}_business' for topic in ['topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']], inplace=True)
+
+# Display the final DataFrame
+merged_df
+
+
+# %%
+merged_df.columns
+
+# %%
+traindataset=merged_df.drop(columns=['review_id', 'user_id', 'business_id','text', 'words', 'words_join','adj', 'adj_join', ])
+
+# %%
+traindataset=traindataset.rename(columns={'stars_review': 'y'}, inplace=False)
+
+
+# %% [markdown]
+# ## TRAINING
+
+# %%
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
+
+# Assuming 'traindataset' is your DataFrame
+# Step 1: Split into X and y
+X = traindataset[['vader','topic_0', 'topic_1', 'topic_2', 'topic_3', 'topic_4', 'topic_5']]
+y = traindataset['y']
+
+# Step 2: Split into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Step 3: Scale the features (X_train and X_test)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+
+# Step 4: Train a Random Forest Regression model
+rf_regressor = RandomForestRegressor(n_estimators=100, random_state=42)
+rf_regressor.fit(X_train_scaled, y_train)
+
+# Step 5: Make predictions on the test set
+y_pred = rf_regressor.predict(X_test_scaled)
+
+# Step 6: Evaluate the model (for example, using Mean Squared Error)
+mse = mean_squared_error(y_test, y_pred)
+print(f'Mean Squared Error: {mse}')
+# Step 3: Calculate the Mean Absolute Error (MAE)
+mae = mean_absolute_error(y_test, y_pred)
+print(f'Mean Absolute Error (MAE): {mae}')
+
+# %%
 import numpy as np
+import matplotlib.pyplot as plt
 
-# Obtener todos los vectores de palabras en los tópicos
-word_vectors = {
-    word: model.wv[word]
-    for topic in filtered_top_n_words_lda
-    for word in topic
-    if word in model.wv
-}
+# Apply jitter to predicted and actual values to reduce overlap
+jitter_strength = 0.15  # Adjust this to increase/decrease jitter
+y_test_jittered = y_test + np.random.uniform(-jitter_strength, jitter_strength, len(y_test))
+y_pred_jittered = y_pred + np.random.uniform(-jitter_strength, jitter_strength, len(y_pred))
 
-# Lista de palabras con vector disponible
-word_list = list(word_vectors.keys())
+# Plot predicted vs actual values with alpha transparency and jitter
+plt.figure(figsize=(8, 6))
+plt.scatter(y_test_jittered, y_pred_jittered, alpha=0.05, color='blue')  # Apply alpha transparency
+plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], color='red', linestyle='--')  # Ideal line
 
-# Calcular distancias entre todos los pares de palabras en los tópicos
-distances = []
-for topic in filtered_top_n_words_lda:
-    topic_vectors = [word_vectors[word] for word in topic if word in word_vectors]
-    for i in range(len(topic_vectors)):
-        for j in range(i + 1, len(topic_vectors)):
-            distances.append(euclidean(topic_vectors[i], topic_vectors[j]))
+plt.xlabel('Actual Values')
+plt.ylabel('Predicted Values')
+plt.title('Predicted vs Actual Values with Jitter and Transparency')
 
-# Calcular la distancia media
-mean_distance = np.mean(distances) if distances else 0
-print(f"Distancia media entre palabras en los tópicos: {mean_distance}")
+# Show plot
+plt.show()
+
+
+# %%
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Step 1: Round the predicted values to make them discrete
+y_pred_rounded = y_pred.round()
+
+# Step 2: Confusion Matrix (after rounding)
+cm = confusion_matrix(y_test, y_pred_rounded)
+
+# Plot confusion matrix as a heatmap
+plt.figure(figsize=(8, 6))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=[str(i) for i in range(int(min(y_test)), int(max(y_test)) + 1)],
+            yticklabels=[str(i) for i in range(int(min(y_test)), int(max(y_test)) + 1)])
+plt.ylabel('Actual')
+plt.xlabel('Predicted')
+plt.title('Confusion Matrix (After Rounding)')
+plt.show()
+
+
 
 
 
