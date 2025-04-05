@@ -8,10 +8,7 @@ from load_data import load_city_data
 def split_data():
     data = load_city_data(city="Philadelphia")
     review_df = data["reviews"]
-    business_df = data["businesses"]
-    restaurant_df = business_df[
-        business_df["categories"].str.contains("Restaurants", na=False)
-    ]
+    restaurant_df = data["restaurants"]
 
     full_df = (
         pd.merge(restaurant_df, review_df, how="left", on="business_id")

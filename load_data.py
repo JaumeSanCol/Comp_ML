@@ -41,16 +41,30 @@ def load_city_data(city: str) -> pd.DataFrame:
         review_df = data["reviews"]
         business_df = data["businesses"]
 
-        businesses_in_city = business_df[business_df["city"] == city].reset_index(drop=True)
+        businesses_in_city = business_df[business_df["city"] == city].reset_index(
+            drop=True
+        )
         business_ids = businesses_in_city["business_id"]
 
         # before reindexing reviews, sort them by the primary key
         # this is to ensure the same ordering no matter what
         # and to have the same train-test split indices all the time.
-        reviews_in_city = review_df[review_df["business_id"].isin(business_ids)].sort_values(
-            by="review_id").reset_index(drop=True)
+        reviews_in_city = (
+            review_df[review_df["business_id"].isin(business_ids)]
+            .sort_values(by="review_id")
+            .reset_index(drop=True)
+        )
 
-        city_data = {"reviews": reviews_in_city, "businesses": businesses_in_city}
+        # we will assume a business is a gastronomy business if it has "Restaurants" in its categories.
+        restaurant_df = businesses_in_city[
+            businesses_in_city["categories"].str.contains("Restaurants", na=False)
+        ].reset_index(drop=True)
+
+        city_data = {
+            "reviews": reviews_in_city,
+            "businesses": businesses_in_city,
+            "restaurants": restaurant_df,
+        }
 
         with open(file_path, "wb") as f:
             pickle.dump(city_data, f)
