@@ -130,5 +130,13 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = split_data()
     transform_data_pipeline.fit_transform(X_train, y_train)
 
-    X_transformed = transform_data_pipeline.transform(X_test)
+    X_transformed = transform_data_pipeline.transform(X_train)
     assert not np.any(np.isnan(X_transformed)), "NaNs in transformed data"
+        # Guardar en un CSV
+    df_transformed = pd.DataFrame(X_transformed)
+    y_train = pd.DataFrame(y_train)
+    print(len(X_train))
+    print(len(y_train))
+    print(len(X_transformed))
+    df_transformed.to_csv("training/X_transformed.csv", index=False)
+    y_train.to_csv("training/y_transformed.csv", index=False)
