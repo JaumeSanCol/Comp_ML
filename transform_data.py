@@ -122,21 +122,62 @@ transform_data_pipeline = Pipeline(
         ),
     ]
 )
-
 if __name__ == "__main__":
     import numpy as np
     from split_data import split_data
 
     X_train, X_test, y_train, y_test = split_data()
-    transform_data_pipeline.fit_transform(X_train, y_train)
 
+    # Fit the pipeline
+    transform_data_pipeline.fit(X_train, y_train)
+
+    # Transform training data
     X_transformed = transform_data_pipeline.transform(X_train)
-    assert not np.any(np.isnan(X_transformed)), "NaNs in transformed data"
-        # Guardar en un CSV
-    df_transformed = pd.DataFrame(X_transformed)
-    y_train = pd.DataFrame(y_train)
-    print(len(X_train))
-    print(len(y_train))
-    print(len(X_transformed))
-    df_transformed.to_csv("training/X_transformed.csv", index=False)
-    y_train.to_csv("training/y_transformed.csv", index=False)
+
+    # Load business dataset
+    business = pd.read_csv("business_with_topics.csv")
+    business_ids = business["business_id"].copy()
+
+    # Transform business dataset
+    business_features = transform_data_pipeline.transform(business)
+
+    # ---- HERE: Build the correct column names ----
+
+    # 1. Get the numeric feature names (those were scaled)
+    numeric_features = NUM_FEATURES  # latitude, longitude, etc.
+
+    # 2. Get the category columns (top categories + "Other")
+    category_features = [
+        f"cat_{cat.replace(' ', '_')}"
+        for cat in transform_data_pipeline.named_steps["category_transformer"].top_categories
+    ] + ["cat_Other"]
+
+    # 3. Get the passthrough features from remainder
+    passthrough_features = [
+        col for col in X_train.columns
+        if col not in transform_data_pipeline.named_steps["column_dropper"].columns_to_drop
+        and col not in NUM_FEATURES
+        and col != "categories"
+    ]
+
+    # 4. Final feature list
+    final_columns = numeric_features + category_features + passthrough_features
+
+    assert X_transformed.shape[1] == len(final_columns), "Mismatch between columns and features!"
+
+    # ------------------------------------------------
+
+    # Save everything with correct columns
+    X_transformed_df = pd.DataFrame(X_transformed, columns=final_columns)
+    business_features_df = pd.DataFrame(business_features, columns=final_columns)
+
+    # Attach business_id
+    business_transformed = pd.concat(
+        [business_ids.reset_index(drop=True), business_features_df.reset_index(drop=True)],
+        axis=1
+    )
+
+    # Save
+    X_transformed_df.to_csv("training/X_transformed.csv", index=False)
+    pd.DataFrame(y_train).to_csv("training/y_transformed.csv", index=False)
+    business_transformed.to_csv("recommendation/business_transformed.csv", index=False)
